@@ -61,13 +61,10 @@ fn main() {
         Ok(()) => {
             fs::remove_file(file.zip_filename).unwrap();
         },
-        Err(()) => {},
+        Err(()) => println!("The transaction failed."),
     }
-
-    // TODO Delete zip depending on result
 }
 
-// TODO make this return a result so that we can either delete the zip or try again
 fn connect_to_server(file: &FileData) -> Result<(), ()> {
     let mut success: Result<(), ()> = Err(());
 
