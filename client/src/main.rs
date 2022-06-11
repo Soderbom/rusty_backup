@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, fs};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use chrono::prelude::*;
@@ -55,13 +55,22 @@ fn main() {
     let file = FileData::new(filename, bytes);
     file.zip_file();
     
-    connect_to_server(&file);   
+    let success = connect_to_server(&file);   
+
+    match success {
+        Ok(()) => {
+            fs::remove_file(file.zip_filename).unwrap();
+        },
+        Err(()) => {},
+    }
 
     // TODO Delete zip depending on result
 }
 
 // TODO make this return a result so that we can either delete the zip or try again
-fn connect_to_server(file: &FileData) {
+fn connect_to_server(file: &FileData) -> Result<(), ()> {
+    let mut success: Result<(), ()> = Err(());
+
     //https://riptutorial.com/rust/example/4404/a-simple-tcp-client-and-server-application--echo
     match TcpStream::connect("localhost:3333") {
         Ok(mut stream) => {
@@ -74,34 +83,36 @@ fn connect_to_server(file: &FileData) {
 
             stream.write(&metadata).unwrap();
 
-            let mut hash_ok = [0 as u8; 3];
-            match stream.read(&mut hash_ok) {
+            match talk_to_server(&mut stream) {
                 Ok(_) => {
-                    if &hash_ok == b"200" {
-                        println!("OK");
-
-                        stream.write(&bytes).unwrap();
-
-                        let mut file_ok = [0 as u8; 3];
-                        match stream.read(&mut file_ok) {
-                            Ok(_) => {
-                                if &file_ok == b"200" {
-                                    println!("File transfered successfully.");
-
-                                    stream.write(&bytes).unwrap();
-                                } else {
-                                    println!("File transfer failed.");
-                                }
-                            },
-                            Err(e) => println!("Error: {}", e),
-                        }
-                    } else {
-                        println!("500");
-                    }
+                    stream.write(&bytes).unwrap();
+                    success = talk_to_server(&mut stream);
                 },
-                Err(e) => println!("Error: {}", e),
-            }            
+                Err(()) => println!("An error occured."),
+            }                        
         },
         Err(e) => println!("Something went wrong: {}", e),
     }
+    return success
+}
+
+fn talk_to_server(stream: &mut TcpStream) -> Result<(), ()> {
+    let mut response = [0 as u8; 3];
+
+    match stream.read(&mut response) {
+        Ok(_) => {
+            if &response == b"200" {
+                println!("OK");
+                Ok(())
+            } else {
+                println!("500");
+                Err(())
+            }
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            Err(())
+        }
+    }     
+    
 }
