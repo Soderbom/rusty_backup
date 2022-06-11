@@ -28,7 +28,7 @@ fn handle_client(mut stream: TcpStream) {
     let file_size = u32::from_be_bytes(buffer[64..68].try_into().unwrap()) as usize;
     println!("Expecting file with hash {:?} and size {}B", String::from_utf8_lossy(&hash), &file_size);
 
-    stream.write(b"true").unwrap();
+    stream.write(b"200").unwrap();
 
     let mut zipfile = vec![0 as u8; file_size];
 
@@ -48,11 +48,11 @@ fn save_zip(zipfile: Vec<u8>, hash: &[u8], stream: &mut TcpStream) {
     if zip_hash == String::from_utf8_lossy(hash) {
         let mut file = File::create(out_name).unwrap();
         file.write_all(&zipfile).unwrap();
-        stream.write(b"true ").unwrap();
+        stream.write(b"200").unwrap();
         
     } else {
         println!("The file is corrupt!");
-        stream.write(b"false").unwrap();
+        stream.write(b"500").unwrap();
     }
     
 
