@@ -1,38 +1,56 @@
-use std::{env, fs};
+use std::fs;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use chrono::prelude::*;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+use walkdir::{DirEntry, WalkDir};
 
 struct FileData {
-    filename: String,
-    bytes: Vec<u8>,
+    foldername: String,
     zip_filename: String,
 }
 
 impl FileData {
-    fn new(filename: String, file_bytes: Vec<u8>) -> FileData {
+    fn new(foldername: String) -> FileData {
         let utc: DateTime<Utc> = Utc::now();  
-        let zip_filename = format!("{}-{}.zip", utc.year(), utc.month());
+        let zip_filename = format!("filename-{}-{}.zip", utc.year(), utc.month());
 
         FileData { 
-            filename: filename, 
+            foldername: foldername, 
             zip_filename: zip_filename,
-            bytes: file_bytes, 
         }        
     }
 
-    fn zip_file(&self) {
-        // From https://github.com/zip-rs/zip/tree/bb230ef56adc13436d1fcdfaa489249d119c498f/examples
-        let path = std::path::Path::new(&self.zip_filename);
-        let file = std::fs::File::create(&path).unwrap();
-        
-        let mut zip = zip::ZipWriter::new(file);
-    
-        zip.start_file(&self.filename, Default::default()).unwrap();
-        zip.write_all(&self.bytes).unwrap();
-    }
+    fn zip_folder(&self, folder: String) {
+        let path = Path::new(&self.zip_filename);
+        let file = File::create(&path).unwrap();
 
-    
+        let walkdir = WalkDir::new(&folder);
+        let folder_iter = walkdir.into_iter().filter_map(|e| e.ok());
+
+        let mut zip = zip::ZipWriter::new(file);
+
+        let mut buffer = Vec::new();
+
+        for item in folder_iter {
+            let path = item.path();
+            let name = path.strip_prefix(Path::new(&folder)).unwrap();
+
+            if path.is_file() {
+                zip.start_file(name.to_str().unwrap(), Default::default()).unwrap();
+                let mut f = File::open(path).unwrap();
+
+                f.read_to_end(&mut buffer).unwrap();
+                zip.write_all(&buffer).unwrap();
+                buffer.clear();
+
+            } else if !name.as_os_str().is_empty() {
+                zip.add_directory(name.to_str().unwrap(), Default::default()).unwrap();
+            }
+        }
+    }
 
     fn get_hash(&self) -> String {
         let zip_content = std::fs::read(&self.zip_filename).unwrap();
@@ -48,21 +66,40 @@ impl FileData {
 }
 
 fn main() {
-    // Read the file to send with args
-    let filename = env::args().nth(1).expect("");
-    let bytes = std::fs::read(&filename).unwrap();
+    let folders = locations();
+    println!("[+] Config containing {} folders.", folders.len());
 
-    let file = FileData::new(filename, bytes);
-    file.zip_file();
-    
-    let success = connect_to_server(&file);   
+    for folder in folders {
+        let foldername = String::from(folder.split('/').last().unwrap());
 
-    match success {
-        Ok(()) => {
-            fs::remove_file(file.zip_filename).unwrap();
-        },
-        Err(()) => println!("The transaction failed."),
+        println!("[+] Working on: {}", foldername);
+
+        let file = FileData::new(foldername);
+        file.zip_folder(folder);
+        
+        let success = connect_to_server(&file);   
+
+        match success {
+            Ok(()) => {
+                fs::remove_file(file.zip_filename).unwrap();
+            },
+            Err(()) => println!("The transaction failed."),
+        }
     }
+}
+
+fn locations() -> Vec<String> {
+    let file = File::open("folders.conf").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut folders = Vec::<String>::new();
+
+    for line in reader.lines() {
+        let line = line.unwrap();
+        folders.push(line);
+    }
+
+    return folders
 }
 
 fn connect_to_server(file: &FileData) -> Result<(), ()> {
@@ -76,7 +113,7 @@ fn connect_to_server(file: &FileData) -> Result<(), ()> {
             let (file_size, bytes) = file.get_zip_information();
 
             // Send metadata
-            let metadata = [file.get_hash().as_bytes(), &file_size].concat();
+            let metadata = [file.get_hash().as_bytes(), &file_size, &file.foldername.as_bytes()].concat();
 
             stream.write(&metadata).unwrap();
 
@@ -111,5 +148,4 @@ fn talk_to_server(stream: &mut TcpStream) -> Result<(), ()> {
             Err(())
         }
     }     
-    
 }
