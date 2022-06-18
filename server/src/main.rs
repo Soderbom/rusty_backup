@@ -10,33 +10,37 @@ fn main() {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => {
-                println!("Connection established with: {}", stream.peer_addr().unwrap());
-                handle_client(stream)
+            Ok(stream) => {                
+                handle_client(stream);
             },
             Err(e) => println!("An error occured: {}", e)
         }
     }
 }
 
-fn handle_client(mut stream: TcpStream) {
+fn handle_client(mut stream: TcpStream){
     let mut buffer = [0; 100];
 
     // Recieve file hash and size
-    stream.read(&mut buffer).unwrap();
-    let hash = &buffer[..64];
-    let file_size = u32::from_be_bytes(buffer[64..68].try_into().unwrap()) as usize;
-    let folder_name = str::from_utf8(&buffer[68..]).unwrap().replace("\0", "");
+    match stream.read(&mut buffer) {
+        Ok(_) => {
+            println!("Connection established with: {}", stream.peer_addr().unwrap());
+            let hash = &buffer[..64];
+            let file_size = u32::from_be_bytes(buffer[64..68].try_into().unwrap()) as usize;
+            let folder_name = str::from_utf8(&buffer[68..]).unwrap().replace("\0", "");
 
-    println!("Expecting file with hash {:?} and size {}B", String::from_utf8_lossy(&hash), &file_size);
+            println!("Expecting file with hash {:?} and size {}B", String::from_utf8_lossy(&hash), &file_size);
 
-    stream.write(b"200").unwrap();
+            stream.write(b"200").unwrap();
 
-    let mut zipfile = vec![0 as u8; file_size];
+            let mut zipfile = vec![0 as u8; file_size];
 
-    match stream.read_exact(&mut zipfile) {
-        Ok(_) => save_zip(folder_name, zipfile, hash, &mut stream),
-        Err(e) => println!("Error: {}", e),
+            match stream.read_exact(&mut zipfile) {
+                Ok(_) => save_zip(folder_name, zipfile, hash, &mut stream),
+                Err(e) => println!("Error: {}", e),
+            } 
+        },
+        Err(e) => println!("Connection lost with error: {}", e),
     }
 }
 

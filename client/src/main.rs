@@ -5,7 +5,7 @@ use chrono::prelude::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 struct FileData {
     foldername: String,

@@ -1,3 +1,4 @@
 client/target/
 server/target/
 client/src/test.txt
+client/src/folders.conf
